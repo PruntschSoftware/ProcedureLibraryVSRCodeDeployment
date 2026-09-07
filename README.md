@@ -11,7 +11,7 @@ PROPATH gegenueber einer Procedure Library (`.pl`).
 | `src/build/generate-tests.p` | erzeugt die Testprozeduren neu (`-param "<Zielverzeichnis>,<Anzahl>"`) |
 | `src/build/compile-tests.p` | kompiliert die Prozeduren nach `build/rcode` (`-param "<Quelle>,<r-Code-Verzeichnis>"`) |
 | `src/build/runtests.p` | ruft alle Prozeduren der Reihe nach dynamisch auf und gibt die benoetigte Zeit aus (`-param "<Bezeichnung>,<Anzahl>,<Ergebnisdatei>"`) |
-| `benchmark.sh` | fuehrt die komplette Messung inklusive Packetierung in die Procedure Library aus |
+| `benchmark.sh` | fuehrt die komplette Messung inklusive Packetierung in die Procedure Library aus und protokolliert alles nach `build/benchmark.log` |
 
 Eine Testprozedur sieht so aus:
 
@@ -55,3 +55,49 @@ Neue Testprozeduren erzeugen:
 ```bash
 $DLC/bin/_progres -b -p src/build/generate-tests.p -param "src/procedures,1000"
 ```
+
+## Logging und Fehlersuche
+
+`benchmark.sh` protokolliert jeden Schritt mit Zeitstempel auf der Konsole und
+zusaetzlich in `build/benchmark.log` (ueber `LOG_FILE` aenderbar). Es gibt
+keinen stillen Abbruch mehr:
+
+* jeder Schritt wird mit Kommando, kompletter Ausgabe und Exit-Code geloggt,
+* ein `ERR`-Trap protokolliert unerwartete Fehler mit Zeilennummer und
+  Kommando, Traps fuer `INT`/`TERM`/`HUP` melden Abbrueche durch Signale,
+* ein `EXIT`-Trap gibt am Ende immer den Exit-Code und den zuletzt
+  ausgefuehrten Schritt aus,
+* fehlende Voraussetzungen (kein `DLC`, kein `_progres`/`prolib`, ungueltiges
+  `COUNT`, zu wenige Testprozeduren) werden vor dem ersten Aufruf gemeldet,
+* die ABL-Programme schreiben ihr Ergebnis nach `build/status/*.status`
+  (`OK: …` oder `ERROR: …`). Das Skript prueft diese Dateien; fehlt eine
+  Statusdatei, gilt der Lauf als vorzeitig beendet und wird als Fehler
+  gemeldet. Damit werden auch Faelle erkannt, in denen `_progres` mit
+  Exit-Code 0 zurueckkommt.
+
+Ausfuehrliche Ablaufverfolgung (`set -x`) einschalten:
+
+```bash
+DEBUG=1 ./benchmark.sh
+```
+
+### Git-Bash unter Windows
+
+Das Skript erkennt MSYS/MinGW/Cygwin automatisch und
+
+* verwendet `_progres.exe` bzw. `prolib.exe`,
+* wandelt Pfade fuer den PROPATH mit `cygpath -w` in Windows-Pfade um
+  (OpenEdge kann mit Pfaden wie `/c/dlc` nichts anfangen),
+* sucht `DLC` in den ueblichen Standardpfaden, falls die Variable nicht
+  gesetzt ist, und meldet andernfalls einen klaren Fehler.
+
+Typischer Aufruf in Git-Bash:
+
+```bash
+DLC=/c/Progress/OpenEdge COUNT=1000 ./benchmark.sh
+```
+
+Auf der ABL-Seite protokollieren `generate-tests.p`, `compile-tests.p` und
+`runtests.p` alle Fehler ueber `MESSAGE` (Compilerfehler inklusive Zeile und
+Spalte, fehlgeschlagene dynamische Aufrufe inklusive aller Meldungen aus
+`ERROR-STATUS`) und fangen unerwartete Fehler in einem `CATCH`-Block ab.
