@@ -23,8 +23,9 @@ i = 1.
 
 ## Messung ausfuehren
 
-Voraussetzung ist eine installierte OpenEdge Runtime; `DLC` muss gesetzt sein
-(Default `/usr/dlc`).
+Voraussetzung ist eine installierte OpenEdge Runtime. Das Installations-
+verzeichnis ist in `benchmark.sh` fest mit `C:\dlc128_x64` hinterlegt; eine
+gesetzte Umgebungsvariable `DLC` hat weiterhin Vorrang.
 
 ```bash
 ./benchmark.sh          # 1000 Prozeduren
@@ -67,7 +68,8 @@ keinen stillen Abbruch mehr:
   Kommando, Traps fuer `INT`/`TERM`/`HUP` melden Abbrueche durch Signale,
 * ein `EXIT`-Trap gibt am Ende immer den Exit-Code und den zuletzt
   ausgefuehrten Schritt aus,
-* fehlende Voraussetzungen (kein `DLC`, kein `_progres`/`prolib`, ungueltiges
+* fehlende Voraussetzungen (DLC-Verzeichnis nicht vorhanden, kein
+  `_progres`/`prolib`, ungueltiges
   `COUNT`, zu wenige Testprozeduren) werden vor dem ersten Aufruf gemeldet,
 * die ABL-Programme schreiben ihr Ergebnis nach `build/status/*.status`
   (`OK: …` oder `ERROR: …`). Das Skript prueft diese Dateien; fehlt eine
@@ -88,13 +90,16 @@ Das Skript erkennt MSYS/MinGW/Cygwin automatisch und
 * verwendet `_progres.exe` bzw. `prolib.exe`,
 * wandelt Pfade fuer den PROPATH mit `cygpath -w` in Windows-Pfade um
   (OpenEdge kann mit Pfaden wie `/c/dlc` nichts anfangen),
-* sucht `DLC` in den ueblichen Standardpfaden, falls die Variable nicht
-  gesetzt ist, und meldet andernfalls einen klaren Fehler.
+* verwendet ohne gesetzte Umgebungsvariable die feste Vorgabe
+  `C:\dlc128_x64` und rechnet die Windows-Schreibweise fuer die Datei-
+  pruefungen der Shell in `/c/dlc128_x64` um (an die OpenEdge-Programme wird
+  weiterhin der Windows-Pfad in `$DLC` uebergeben).
 
 Typischer Aufruf in Git-Bash:
 
 ```bash
-DLC=/c/Progress/OpenEdge COUNT=1000 ./benchmark.sh
+COUNT=1000 ./benchmark.sh                       # nutzt C:\dlc128_x64
+DLC='C:\Progress\OpenEdge' ./benchmark.sh       # andere Installation
 ```
 
 Auf der ABL-Seite protokollieren `generate-tests.p`, `compile-tests.p` und

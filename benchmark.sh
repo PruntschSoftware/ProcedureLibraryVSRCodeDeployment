@@ -9,10 +9,12 @@
 # 4. wiederholt die Messung mit der Library im PROPATH
 # 5. gibt den Unterschied der beiden Messungen aus
 #
-# Voraussetzung: installierte OpenEdge Runtime, $DLC gesetzt (oder /usr/dlc).
+# Voraussetzung: installierte OpenEdge Runtime. Fest hinterlegt ist
+# "C:\dlc128_x64"; eine gesetzte Umgebungsvariable DLC hat Vorrang.
 #
 # Umgebungsvariablen:
 #   DLC       Installationsverzeichnis der OpenEdge Runtime
+#             (Default: C:\dlc128_x64)
 #   COUNT     Anzahl der aufzurufenden Prozeduren (Default 1000)
 #   LOG_FILE  Pfad der Logdatei (Default build/benchmark.log)
 #   DEBUG=1   zusaetzliche Ablaufverfolgung (set -x) in die Logdatei
@@ -35,6 +37,10 @@ cd "$ROOT" || {
     echo "FEHLER: Wechsel nach '$ROOT' nicht moeglich." >&2
     exit 1
 }
+
+# Fest hinterlegte OpenEdge-Installation. Kann per Umgebungsvariable DLC
+# uebersteuert werden.
+DEFAULT_DLC='C:\dlc128_x64'
 
 COUNT="${COUNT:-1000}"
 
@@ -225,29 +231,38 @@ native_path() {
 CURRENT_STEP="Pruefung der OpenEdge-Installation"
 
 if [ -z "${DLC:-}" ]; then
-    if [ "$IS_WINDOWS" -eq 1 ]; then
-        log_warn "DLC ist nicht gesetzt - probiere Standardpfade."
-        for candidate in "/c/Progress/OpenEdge" "/c/dlc" "/d/Progress/OpenEdge"; do
-            if [ -d "$candidate" ]; then
-                DLC="$candidate"
-                break
-            fi
-        done
-    else
-        DLC="/usr/dlc"
-    fi
+    DLC="$DEFAULT_DLC"
+    log_info "DLC ist nicht gesetzt - verwende Vorgabe '$DEFAULT_DLC'."
+else
+    log_info "DLC aus der Umgebung uebernommen: '$DLC'."
 fi
 
-DLC="${DLC:-}"
+# Die Windows-Schreibweise (C:\dlc128_x64) versteht die Shell nicht; fuer
+# Datei-Tests wird daher ein Shell-Pfad (/c/dlc128_x64) benoetigt. Die
+# OpenEdge-Programme selbst erwarten umgekehrt den Windows-Pfad in $DLC.
+DLC_SHELL="$DLC"
+
+case "$DLC" in
+    [A-Za-z]:[\\/]*)
+        if command -v cygpath >/dev/null 2>&1; then
+            DLC_SHELL="$(cygpath -u "$DLC" 2>/dev/null || printf '%s' "$DLC")"
+        else
+            DLC_SHELL="/$(printf '%s' "${DLC%%:*}" | tr 'A-Z' 'a-z')$(printf '%s' "${DLC#*:}" | tr '\\' '/')"
+        fi
+        log_info "DLC '$DLC' als Shell-Pfad '$DLC_SHELL' interpretiert."
+        ;;
+esac
+
 export DLC
 
-if [ -z "$DLC" ] || [ ! -d "$DLC" ]; then
-    die "OpenEdge-Installationsverzeichnis nicht gefunden (DLC='${DLC:-<leer>}')." \
-        "Bitte DLC setzen, z.B.: DLC=/c/Progress/OpenEdge ./benchmark.sh"
+if [ ! -d "$DLC_SHELL" ]; then
+    die "OpenEdge-Installationsverzeichnis nicht gefunden (DLC='$DLC'," \
+        "Shell-Pfad '$DLC_SHELL')." \
+        "Bitte DLC setzen, z.B.: DLC='$DEFAULT_DLC' ./benchmark.sh"
 fi
 
-PROGRES="$DLC/bin/_progres$EXE"
-PROLIB="$DLC/bin/prolib$EXE"
+PROGRES="$DLC_SHELL/bin/_progres$EXE"
+PROLIB="$DLC_SHELL/bin/prolib$EXE"
 
 for tool in "$PROGRES" "$PROLIB"; do
     if [ ! -f "$tool" ]; then
