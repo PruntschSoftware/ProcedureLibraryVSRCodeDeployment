@@ -335,13 +335,17 @@ log_info "Erzeugte r-Files: $rcount"
 RUN1_STATUS="$STATUS_DIR/run-rcode.status"
 
 CURRENT_STEP="Messung 1: lose r-Files"
-PROPATH="$(native_path "$ROOT/$RCODE_DIR")"
+RCODE_NATIVE="$(native_path "$ROOT/$RCODE_DIR")"
+
+# Der PROPATH-Eintrag wird zusaetzlich als Parameter uebergeben, weil
+# _progres.exe unter Windows die Umgebungsvariable PROPATH ignoriert.
+PROPATH="$RCODE_NATIVE"
 export PROPATH
-log_info "PROPATH=$PROPATH"
+log_info "PROPATH-Eintrag: $RCODE_NATIVE"
 
 run_cmd "Messung 1 (lose r-Files)" \
     "$PROGRES" -b -p src/build/runtests.p \
-    -param "r-Files,$COUNT,$RESULT,$RUN1_STATUS"
+    -param "r-Files,$COUNT,$RESULT,$RUN1_STATUS,$RCODE_NATIVE"
 check_status_file "Messung 1 (lose r-Files)" "$RUN1_STATUS"
 
 # ---------------------------------------------------------------------------
@@ -360,6 +364,7 @@ add_rcode_to_library() (
     cd "$RCODE_DIR" || exit 1
     # In Bloecken hinzufuegen, damit die Kommandozeile nicht zu lang wird.
     find . -maxdepth 1 -name '*.r' \
+        | sed 's|^\./||' \
         | xargs -n 100 "$PROLIB" "$LIB_NATIVE" -add
 )
 
@@ -380,11 +385,11 @@ RUN2_STATUS="$STATUS_DIR/run-library.status"
 CURRENT_STEP="Messung 2: Procedure Library"
 PROPATH="$LIB_NATIVE"
 export PROPATH
-log_info "PROPATH=$PROPATH"
+log_info "PROPATH-Eintrag: $LIB_NATIVE"
 
 run_cmd "Messung 2 (Procedure Library)" \
     "$PROGRES" -b -p src/build/runtests.p \
-    -param "Procedure Library,$COUNT,$RESULT,$RUN2_STATUS"
+    -param "Procedure Library,$COUNT,$RESULT,$RUN2_STATUS,$LIB_NATIVE"
 check_status_file "Messung 2 (Procedure Library)" "$RUN2_STATUS"
 
 # ---------------------------------------------------------------------------

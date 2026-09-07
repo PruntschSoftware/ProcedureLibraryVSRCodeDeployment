@@ -10,7 +10,7 @@ PROPATH gegenueber einer Procedure Library (`.pl`).
 | `src/procedures/test0001.p` … `test1000.p` | 1000 winzige Testprozeduren, die dynamisch je genau einmal aufgerufen werden |
 | `src/build/generate-tests.p` | erzeugt die Testprozeduren neu (`-param "<Zielverzeichnis>,<Anzahl>"`) |
 | `src/build/compile-tests.p` | kompiliert die Prozeduren nach `build/rcode` (`-param "<Quelle>,<r-Code-Verzeichnis>"`) |
-| `src/build/runtests.p` | ruft alle Prozeduren der Reihe nach dynamisch auf und gibt die benoetigte Zeit aus (`-param "<Bezeichnung>,<Anzahl>,<Ergebnisdatei>"`) |
+| `src/build/runtests.p` | ruft alle Prozeduren der Reihe nach dynamisch auf und gibt die benoetigte Zeit aus (`-param "<Bezeichnung>,<Anzahl>,<Ergebnisdatei>,<Statusdatei>,<PROPATH-Eintrag>"`) |
 | `benchmark.sh` | fuehrt die komplette Messung inklusive Packetierung in die Procedure Library aus und protokolliert alles nach `build/benchmark.log` |
 
 Eine Testprozedur sieht so aus:
@@ -47,9 +47,15 @@ Die Rohwerte landen zusaetzlich als `Bezeichnung;Anzahl;Millisekunden` in
 Einzelne Schritte lassen sich auch von Hand starten, z. B.:
 
 ```bash
-PROPATH=$PWD/build/lib/testlib.pl $DLC/bin/_progres -b -p src/build/runtests.p \
-    -param "Procedure Library,1000,build/results.csv"
+"$DLC/bin/_progres" -b -p src/build/runtests.p \
+    -param "Procedure Library,1000,build/results.csv,build/status/run.status,$PWD/build/lib/testlib.pl"
 ```
+
+Der PROPATH-Eintrag wird bewusst als Parameter uebergeben und in `runtests.p`
+per `PROPATH = <Eintrag> + "," + PROPATH` gesetzt: `_progres.exe` uebernimmt
+unter Windows die Umgebungsvariable `PROPATH` nicht, sondern verwendet den in
+der Registry hinterlegten Standard-PROPATH. Ohne diesen Parameter meldet die
+Messung `test0001.r ist ueber den PROPATH nicht erreichbar`.
 
 Neue Testprozeduren erzeugen:
 
@@ -90,6 +96,8 @@ Das Skript erkennt MSYS/MinGW/Cygwin automatisch und
 * verwendet `_progres.exe` bzw. `prolib.exe`,
 * wandelt Pfade fuer den PROPATH mit `cygpath -w` in Windows-Pfade um
   (OpenEdge kann mit Pfaden wie `/c/dlc` nichts anfangen),
+* uebergibt den PROPATH-Eintrag zusaetzlich als Parameter an `runtests.p`,
+  weil `_progres.exe` die Umgebungsvariable `PROPATH` unter Windows ignoriert,
 * verwendet ohne gesetzte Umgebungsvariable die feste Vorgabe
   `C:\dlc128_x64` und rechnet die Windows-Schreibweise fuer die Datei-
   pruefungen der Shell in `/c/dlc128_x64` um (an die OpenEdge-Programme wird

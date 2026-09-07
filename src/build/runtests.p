@@ -2,20 +2,27 @@
    Ruft die Testprozeduren test0001.p .. testNNNN.p der Reihe nach dynamisch
    auf - jede genau einmal - und gibt am Schluss die dafuer benoetigte Zeit
    aus. Welche r-Files verwendet werden (lose im Verzeichnis oder in einer
-   Procedure Library) entscheidet der PROPATH beim Start der Session.
+   Procedure Library) entscheidet der uebergebene PROPATH-Eintrag.
 
    Jeder Fehlerfall (Prozedur nicht im PROPATH, Laufzeitfehler beim Aufruf,
    nicht schreibbare Ergebnisdatei) wird protokolliert und in eine
    Statusdatei geschrieben, damit ein Abbruch nicht unbemerkt bleibt.
 
+   Der PROPATH-Eintrag wird als Parameter uebergeben und hier gesetzt, weil
+   _progres.exe unter Windows die Umgebungsvariable PROPATH ignoriert.
+
    Session-Parameter (-param):
-       <Bezeichnung>,<Anzahl>,<Ergebnisdatei>,<Statusdatei>
-   Default: r-Code,1000,<keine Datei>,<keine Statusdatei>                  */
+       <Bezeichnung>,<Anzahl>,<Ergebnisdatei>,<Statusdatei>,<PROPATH-Eintrag>
+   Default: r-Code,1000,<keine Datei>,<keine Statusdatei>,<PROPATH unveraendert>
+
+   Der PROPATH-Eintrag darf selbst Kommas enthalten; alle weiteren Eintraege
+   ab Position 5 werden wieder zusammengefuegt.                            */
 
 DEFINE VARIABLE cLabel     AS CHARACTER NO-UNDO INITIAL "r-Code".
 DEFINE VARIABLE iCount     AS INTEGER   NO-UNDO INITIAL 1000.
 DEFINE VARIABLE cResult    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cStatus    AS CHARACTER NO-UNDO.
+DEFINE VARIABLE cPropath   AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cParam     AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cProcedure AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iElapsed   AS INTEGER   NO-UNDO.
@@ -50,7 +57,21 @@ IF NUM-ENTRIES(cParam) >= 3 THEN
 IF NUM-ENTRIES(cParam) >= 4 THEN
     cStatus = ENTRY(4, cParam).
 
+/* Ab Eintrag 5 folgt der PROPATH-Eintrag - eventuell enthaltene Kommas
+   werden wieder zusammengesetzt. */
+DO i = 5 TO NUM-ENTRIES(cParam):
+    cPropath = cPropath + (IF cPropath = "" THEN "" ELSE ",") + ENTRY(i, cParam).
+END.
+
 MESSAGE "runtests.p:" cLabel "- Anzahl" iCount.
+
+/* _progres.exe uebernimmt die Umgebungsvariable PROPATH unter Windows nicht,
+   deshalb wird der benoetigte Eintrag hier explizit vorangestellt. */
+IF cPropath <> "" AND cPropath <> ? THEN DO:
+    MESSAGE "Setze PROPATH-Eintrag:" cPropath.
+    PROPATH = cPropath + "," + PROPATH.
+END.
+
 MESSAGE "PROPATH:" PROPATH.
 
 MAIN-BLOCK:
@@ -66,7 +87,9 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
     /* Vorab pruefen, ob der r-Code ueberhaupt gefunden wird - sonst
        laeuft die Messung ins Leere. */
     IF SEARCH("test0001.r") = ? AND SEARCH("test0001.p") = ? THEN DO:
-        cError = "test0001.r ist ueber den PROPATH nicht erreichbar.".
+        cError = "test0001.r ist ueber den PROPATH nicht erreichbar"
+                 + (IF cPropath = "" THEN " (kein PROPATH-Eintrag uebergeben)"
+                    ELSE " (Eintrag '" + cPropath + "')") + ".".
         LEAVE MAIN-BLOCK.
     END.
 
