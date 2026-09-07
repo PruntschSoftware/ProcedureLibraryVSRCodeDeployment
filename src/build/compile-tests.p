@@ -52,7 +52,7 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
    ON STOP  UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
    ON QUIT  UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK:
 
-    IF SEARCH(cSrcDir + "/test0001.p") = ? THEN DO:
+    IF SEARCH(cSrcDir + "/test00001.p") = ? THEN DO:
         cError = "Quellverzeichnis '" + cSrcDir + "' enthaelt keine Testprozeduren.".
         LEAVE MAIN-BLOCK.
     END.

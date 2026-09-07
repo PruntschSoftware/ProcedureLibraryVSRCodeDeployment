@@ -1,0 +1,3 @@
+/* test01987.p */
+DEFINE VARIABLE i AS INTEGER NO-UNDO.
+i = 1987.

@@ -1,3 +1,0 @@
-/* test1000.p */
-DEFINE VARIABLE i AS INTEGER NO-UNDO.
-i = 1000.

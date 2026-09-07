@@ -7,7 +7,7 @@ PROPATH gegenueber einer Procedure Library (`.pl`).
 
 | Pfad | Beschreibung |
 | --- | --- |
-| `src/procedures/test0001.p` … `test1000.p` | 1000 winzige Testprozeduren, die dynamisch je genau einmal aufgerufen werden |
+| `src/procedures/test00001.p` … `test10000.p` | 10000 winzige Testprozeduren, die dynamisch je genau einmal aufgerufen werden |
 | `src/build/generate-tests.p` | erzeugt die Testprozeduren neu (`-param "<Zielverzeichnis>,<Anzahl>"`) |
 | `src/build/compile-tests.p` | kompiliert die Prozeduren nach `build/rcode` (`-param "<Quelle>,<r-Code-Verzeichnis>"`) |
 | `src/build/runtests.p` | ruft alle Prozeduren der Reihe nach dynamisch auf und gibt die benoetigte Zeit aus (`-param "<Bezeichnung>,<Anzahl>,<Ergebnisdatei>,<Statusdatei>,<PROPATH-Eintrag>"`) |
@@ -16,7 +16,7 @@ PROPATH gegenueber einer Procedure Library (`.pl`).
 Eine Testprozedur sieht so aus:
 
 ```progress
-/* test0001.p */
+/* test00001.p */
 DEFINE VARIABLE i AS INTEGER NO-UNDO.
 i = 1.
 ```
@@ -28,39 +28,69 @@ verzeichnis ist in `benchmark.sh` fest mit `C:\dlc128_x64` hinterlegt; eine
 gesetzte Umgebungsvariable `DLC` hat weiterhin Vorrang.
 
 ```bash
-./benchmark.sh          # 1000 Prozeduren
-COUNT=1000 ./benchmark.sh
+./benchmark.sh                              # 10000 Prozeduren, 3 Messrunden
+COUNT=10000 REPEATS=5 WARMUP=1 ./benchmark.sh
 ```
+
+| Variable | Bedeutung | Default |
+| --- | --- | --- |
+| `COUNT` | Anzahl der dynamisch aufgerufenen Prozeduren | `10000` |
+| `REPEATS` | Messrunden je Variante | `3` |
+| `WARMUP` | Warmlaeufe je Variante (Zeiten werden verworfen) | `1` |
 
 Das Skript
 
 1. kompiliert `src/procedures/test*.p` nach `build/rcode`,
-2. ruft alle Prozeduren dynamisch genau einmal auf (PROPATH zeigt auf
-   `build/rcode`) und misst die Laufzeit,
-3. packt dieselben r-Files mit `prolib` in `build/lib/testlib.pl`,
-4. wiederholt die Messung mit der Library im PROPATH,
-5. gibt beide Zeiten und deren Unterschied aus.
+2. packt dieselben r-Files mit `prolib` in `build/lib/testlib.pl` - noch
+   bevor gemessen wird, damit beide Varianten unter gleichen Bedingungen
+   antreten,
+3. faehrt `WARMUP` Warmlaeufe je Variante (Zeiten werden verworfen),
+4. misst `REPEATS` Runden, in denen beide Varianten abwechselnd zuerst
+   drankommen,
+5. gibt je Variante bestes Ergebnis und Mittelwert sowie den Unterschied aus.
 
-Die Rohwerte landen zusaetzlich als `Bezeichnung;Anzahl;Millisekunden` in
-`build/results.csv`.
+Die Rohwerte aller Messrunden landen zusaetzlich als
+`Bezeichnung;Anzahl;Millisekunden` in `build/results.csv`.
+
+### Wird wirklich jedes Mal eine frische AVM gestartet?
+
+Ja. Jede Messung ist ein eigener `_progres`-Aufruf, also ein eigener
+Betriebssystem-Prozess mit einer neu gestarteten AVM. r-Code, den eine
+fruehere Messung geladen hat, kann eine spaetere Session nicht sehen: der
+Session-Cache stirbt mit dem Prozess. Zum Nachweis protokolliert
+`runtests.p` beim Start `SESSION:UNIQUE-ID` - dieser Wert unterscheidet sich
+bei jedem Lauf.
+
+Was sehr wohl "cachen" kann, ist der Datei-Cache des Betriebssystems: die
+zuerst gemessene Variante liest von Platte, die zweite womoeglich schon aus
+dem RAM. Dagegen wirken
+
+* die Warmlaeufe (`WARMUP`), deren Zeiten verworfen werden und die beide
+  Varianten gleichermassen in den Cache holen, und
+* die abwechselnde Reihenfolge in den Messrunden (`REPEATS`), sodass keine
+  Variante systematisch von der Position profitiert.
+
+Fuer eine Messung mit garantiert kaltem Datei-Cache muss der Cache
+ausserhalb des Skripts geleert werden (unter Windows z.B. per Neustart);
+das Skript tut das bewusst nicht.
 
 Einzelne Schritte lassen sich auch von Hand starten, z. B.:
 
 ```bash
 "$DLC/bin/_progres" -b -p src/build/runtests.p \
-    -param "Procedure Library,1000,build/results.csv,build/status/run.status,$PWD/build/lib/testlib.pl"
+    -param "Procedure Library,10000,build/results.csv,build/status/run.status,$PWD/build/lib/testlib.pl"
 ```
 
 Der PROPATH-Eintrag wird bewusst als Parameter uebergeben und in `runtests.p`
 per `PROPATH = <Eintrag> + "," + PROPATH` gesetzt: `_progres.exe` uebernimmt
 unter Windows die Umgebungsvariable `PROPATH` nicht, sondern verwendet den in
 der Registry hinterlegten Standard-PROPATH. Ohne diesen Parameter meldet die
-Messung `test0001.r ist ueber den PROPATH nicht erreichbar`.
+Messung `test00001.r ist ueber den PROPATH nicht erreichbar`.
 
 Neue Testprozeduren erzeugen:
 
 ```bash
-$DLC/bin/_progres -b -p src/build/generate-tests.p -param "src/procedures,1000"
+$DLC/bin/_progres -b -p src/build/generate-tests.p -param "src/procedures,10000"
 ```
 
 ## Logging und Fehlersuche
@@ -106,7 +136,7 @@ Das Skript erkennt MSYS/MinGW/Cygwin automatisch und
 Typischer Aufruf in Git-Bash:
 
 ```bash
-COUNT=1000 ./benchmark.sh                       # nutzt C:\dlc128_x64
+COUNT=10000 ./benchmark.sh                      # nutzt C:\dlc128_x64
 DLC='C:\Progress\OpenEdge' ./benchmark.sh       # andere Installation
 ```
 

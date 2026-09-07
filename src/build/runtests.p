@@ -1,5 +1,5 @@
 /* runtests.p
-   Ruft die Testprozeduren test0001.p .. testNNNN.p der Reihe nach dynamisch
+   Ruft die Testprozeduren test00001.p .. testNNNNN.p der Reihe nach dynamisch
    auf - jede genau einmal - und gibt am Schluss die dafuer benoetigte Zeit
    aus. Welche r-Files verwendet werden (lose im Verzeichnis oder in einer
    Procedure Library) entscheidet der uebergebene PROPATH-Eintrag.
@@ -13,13 +13,13 @@
 
    Session-Parameter (-param):
        <Bezeichnung>,<Anzahl>,<Ergebnisdatei>,<Statusdatei>,<PROPATH-Eintrag>
-   Default: r-Code,1000,<keine Datei>,<keine Statusdatei>,<PROPATH unveraendert>
+   Default: r-Code,10000,<keine Datei>,<keine Statusdatei>,<PROPATH unveraendert>
 
    Der PROPATH-Eintrag darf selbst Kommas enthalten; alle weiteren Eintraege
    ab Position 5 werden wieder zusammengefuegt.                            */
 
 DEFINE VARIABLE cLabel     AS CHARACTER NO-UNDO INITIAL "r-Code".
-DEFINE VARIABLE iCount     AS INTEGER   NO-UNDO INITIAL 1000.
+DEFINE VARIABLE iCount     AS INTEGER   NO-UNDO INITIAL 10000.
 DEFINE VARIABLE cResult    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cStatus    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cPropath   AS CHARACTER NO-UNDO.
@@ -65,6 +65,12 @@ END.
 
 MESSAGE "runtests.p:" cLabel "- Anzahl" iCount.
 
+/* Nachweis, dass jede Messung in einer eigenen, frisch gestarteten AVM
+   laeuft: SESSION:UNIQUE-ID ist je Session/Prozess verschieden. */
+MESSAGE "AVM-Session: UNIQUE-ID" SESSION:UNIQUE-ID
+        "gestartet" STRING(TODAY, "99/99/9999") STRING(TIME, "HH:MM:SS")
+        "- Typ" SESSION:CLIENT-TYPE.
+
 /* _progres.exe uebernimmt die Umgebungsvariable PROPATH unter Windows nicht,
    deshalb wird der benoetigte Eintrag hier explizit vorangestellt. */
 IF cPropath <> "" AND cPropath <> ? THEN DO:
@@ -86,8 +92,8 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
 
     /* Vorab pruefen, ob der r-Code ueberhaupt gefunden wird - sonst
        laeuft die Messung ins Leere. */
-    IF SEARCH("test0001.r") = ? AND SEARCH("test0001.p") = ? THEN DO:
-        cError = "test0001.r ist ueber den PROPATH nicht erreichbar"
+    IF SEARCH("test00001.r") = ? AND SEARCH("test00001.p") = ? THEN DO:
+        cError = "test00001.r ist ueber den PROPATH nicht erreichbar"
                  + (IF cPropath = "" THEN " (kein PROPATH-Eintrag uebergeben)"
                     ELSE " (Eintrag '" + cPropath + "')") + ".".
         LEAVE MAIN-BLOCK.
@@ -96,7 +102,7 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
     ETIME(YES).
 
     DO i = 1 TO iCount:
-        cProcedure = "test" + STRING(i, "9999") + ".p".
+        cProcedure = "test" + STRING(i, "99999") + ".p".
 
         RUN VALUE(cProcedure) NO-ERROR.
 

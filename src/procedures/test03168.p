@@ -1,0 +1,3 @@
+/* test03168.p */
+DEFINE VARIABLE i AS INTEGER NO-UNDO.
+i = 3168.

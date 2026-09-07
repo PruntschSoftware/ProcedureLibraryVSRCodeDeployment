@@ -1,15 +1,15 @@
 /* generate-tests.p
-   Erzeugt die Testprozeduren test0001.p .. testNNNN.p, die spaeter dynamisch
+   Erzeugt die Testprozeduren test00001.p .. testNNNNN.p, die spaeter dynamisch
    genau einmal aufgerufen werden.
 
    Fehler beim Anlegen des Verzeichnisses oder beim Schreiben der Dateien
    werden protokolliert und in eine Statusdatei geschrieben.
 
    Session-Parameter (-param): <Zielverzeichnis>,<Anzahl>,<Statusdatei>
-   Default: src/procedures,1000,<keine Statusdatei>                        */
+   Default: src/procedures,10000,<keine Statusdatei>                        */
 
 DEFINE VARIABLE cTargetDir AS CHARACTER NO-UNDO INITIAL "src/procedures".
-DEFINE VARIABLE iCount     AS INTEGER   NO-UNDO INITIAL 1000.
+DEFINE VARIABLE iCount     AS INTEGER   NO-UNDO INITIAL 10000.
 DEFINE VARIABLE cStatus    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cParam     AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cName      AS CHARACTER NO-UNDO.
@@ -58,7 +58,7 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
                 "(Verzeichnis existiert vermutlich bereits).".
 
     DO i = 1 TO iCount:
-        cName = "test" + STRING(i, "9999").
+        cName = "test" + STRING(i, "99999").
 
         OUTPUT TO VALUE(cTargetDir + "/" + cName + ".p").
         PUT UNFORMATTED
@@ -70,7 +70,7 @@ DO ON ERROR UNDO MAIN-BLOCK, LEAVE MAIN-BLOCK
         iCreated = iCreated + 1.
     END.
 
-    FILE-INFO:FILE-NAME = cTargetDir + "/test0001.p".
+    FILE-INFO:FILE-NAME = cTargetDir + "/test00001.p".
     IF FILE-INFO:FULL-PATHNAME = ? THEN
         cError = "Die Testprozeduren wurden nicht geschrieben ('" + cTargetDir + "').".
 

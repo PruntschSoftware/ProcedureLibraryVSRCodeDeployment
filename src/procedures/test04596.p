@@ -1,0 +1,3 @@
+/* test04596.p */
+DEFINE VARIABLE i AS INTEGER NO-UNDO.
+i = 4596.

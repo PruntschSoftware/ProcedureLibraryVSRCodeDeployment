@@ -1,3 +1,0 @@
-/* test0790.p */
-DEFINE VARIABLE i AS INTEGER NO-UNDO.
-i = 790.

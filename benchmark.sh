@@ -15,7 +15,9 @@
 # Umgebungsvariablen:
 #   DLC       Installationsverzeichnis der OpenEdge Runtime
 #             (Default: C:\dlc128_x64)
-#   COUNT     Anzahl der aufzurufenden Prozeduren (Default 1000)
+#   COUNT     Anzahl der aufzurufenden Prozeduren (Default 10000)
+#   REPEATS   Anzahl der Messrunden je Variante (Default 3)
+#   WARMUP    Anzahl der Warmlaeufe je Variante (Default 1, 0 = keine)
 #   LOG_FILE  Pfad der Logdatei (Default build/benchmark.log)
 #   DEBUG=1   zusaetzliche Ablaufverfolgung (set -x) in die Logdatei
 #
@@ -42,7 +44,9 @@ cd "$ROOT" || {
 # uebersteuert werden.
 DEFAULT_DLC='C:\dlc128_x64'
 
-COUNT="${COUNT:-1000}"
+COUNT="${COUNT:-10000}"
+REPEATS="${REPEATS:-3}"
+WARMUP="${WARMUP:-1}"
 
 SRC_DIR="src/procedures"
 BUILD_DIR="build"
@@ -284,7 +288,18 @@ case "$COUNT" in
     ''|*[!0-9]*) die "COUNT muss eine positive ganze Zahl sein (aktuell: '$COUNT')." ;;
 esac
 [ "$COUNT" -gt 0 ] || die "COUNT muss groesser als 0 sein (aktuell: '$COUNT')."
+
+case "$REPEATS" in
+    ''|*[!0-9]*) die "REPEATS muss eine positive ganze Zahl sein (aktuell: '$REPEATS')." ;;
+esac
+[ "$REPEATS" -gt 0 ] || die "REPEATS muss groesser als 0 sein (aktuell: '$REPEATS')."
+
+case "$WARMUP" in
+    ''|*[!0-9]*) die "WARMUP muss eine ganze Zahl >= 0 sein (aktuell: '$WARMUP')." ;;
+esac
+
 log_info "Anzahl Prozeduren: $COUNT"
+log_info "Messrunden je Variante: $REPEATS (zzgl. $WARMUP Warmlaeufe)"
 
 if [ ! -d "$SRC_DIR" ]; then
     die "Quellverzeichnis '$SRC_DIR' fehlt."
@@ -329,30 +344,12 @@ log_info "Erzeugte r-Files: $rcount"
     || die "Es wurden nur $rcount r-Files erzeugt, benoetigt werden $COUNT."
 
 # ---------------------------------------------------------------------------
-# 2. Messung mit losen r-Files
-# ---------------------------------------------------------------------------
-
-RUN1_STATUS="$STATUS_DIR/run-rcode.status"
-
-CURRENT_STEP="Messung 1: lose r-Files"
-RCODE_NATIVE="$(native_path "$ROOT/$RCODE_DIR")"
-
-# Der PROPATH-Eintrag wird zusaetzlich als Parameter uebergeben, weil
-# _progres.exe unter Windows die Umgebungsvariable PROPATH ignoriert.
-PROPATH="$RCODE_NATIVE"
-export PROPATH
-log_info "PROPATH-Eintrag: $RCODE_NATIVE"
-
-run_cmd "Messung 1 (lose r-Files)" \
-    "$PROGRES" -b -p src/build/runtests.p \
-    -param "r-Files,$COUNT,$RESULT,$RUN1_STATUS,$RCODE_NATIVE"
-check_status_file "Messung 1 (lose r-Files)" "$RUN1_STATUS"
-
-# ---------------------------------------------------------------------------
-# 3. Procedure Library erzeugen
+# 2. Procedure Library erzeugen (vor allen Messungen, damit beide Varianten
+#    unter identischen Bedingungen gemessen werden)
 # ---------------------------------------------------------------------------
 
 CURRENT_STEP="Procedure Library erzeugen"
+RCODE_NATIVE="$(native_path "$ROOT/$RCODE_DIR")"
 LIB_NATIVE="$(native_path "$ROOT/$LIB")"
 
 run_cmd "Procedure Library $LIB anlegen" "$PROLIB" "$LIB_NATIVE" -create
@@ -377,20 +374,85 @@ fi
 run_cmd "Inhalt der Procedure Library pruefen" "$PROLIB" "$LIB_NATIVE" -list
 
 # ---------------------------------------------------------------------------
-# 4. Messung mit Procedure Library
+# 3. Messungen
+#
+#    Jede Messung startet einen eigenen _progres-Prozess und damit eine
+#    frische AVM - r-Code aus einem vorherigen Lauf kann also nicht im
+#    Speicher der Session ueberleben. Die Session protokolliert ihre
+#    SESSION:UNIQUE-ID, damit das nachvollziehbar bleibt.
+#
+#    Gegen den Datei-Cache des Betriebssystems (der sonst die zweite Variante
+#    bevorzugen wuerde) helfen zwei Massnahmen:
+#      * WARMUP-Laeufe je Variante, deren Zeiten verworfen werden,
+#      * REPEATS Messrunden, in denen die Reihenfolge der beiden Varianten
+#        abwechselt.
 # ---------------------------------------------------------------------------
 
-RUN2_STATUS="$STATUS_DIR/run-library.status"
+LABEL_RCODE="r-Files"
+LABEL_LIB="Procedure Library"
 
-CURRENT_STEP="Messung 2: Procedure Library"
-PROPATH="$LIB_NATIVE"
-export PROPATH
-log_info "PROPATH-Eintrag: $LIB_NATIVE"
+# Fuehrt eine einzelne Messung in einer neuen AVM aus.
+#   $1 = Bezeichnung, $2 = PROPATH-Eintrag, $3 = Beschreibung fuer das Log,
+#   $4 = Ergebnisdatei ("" = Zeit verwerfen), $5 = Statusdatei
+measure() {
+    local label="$1" propath_entry="$2" description="$3"
+    local result_file="$4" status_file="$5"
 
-run_cmd "Messung 2 (Procedure Library)" \
-    "$PROGRES" -b -p src/build/runtests.p \
-    -param "Procedure Library,$COUNT,$RESULT,$RUN2_STATUS,$LIB_NATIVE"
-check_status_file "Messung 2 (Procedure Library)" "$RUN2_STATUS"
+    rm -f "$status_file"
+
+    # Der Export wirkt unter Unix; unter Windows zaehlt der Parameter.
+    PROPATH="$propath_entry"
+    export PROPATH
+
+    run_cmd "$description" \
+        "$PROGRES" -b -p src/build/runtests.p \
+        -param "$label,$COUNT,$result_file,$status_file,$propath_entry"
+    check_status_file "$description" "$status_file"
+}
+
+WARM_STATUS="$STATUS_DIR/warmup.status"
+RUN_RCODE_STATUS="$STATUS_DIR/run-rcode.status"
+RUN_LIB_STATUS="$STATUS_DIR/run-library.status"
+
+round=1
+while [ "$round" -le "$WARMUP" ]; do
+    CURRENT_STEP="Warmlauf $round"
+    # Beide Varianten aufwaermen, damit der Datei-Cache fuer keine der
+    # beiden Varianten kaelter ist als fuer die andere. Die Zeiten dieser
+    # Laeufe werden nicht ausgewertet (leere Ergebnisdatei).
+    measure "$LABEL_RCODE" "$RCODE_NATIVE" \
+        "Warmlauf $round/$WARMUP ($LABEL_RCODE, Zeit wird verworfen)" \
+        "" "$WARM_STATUS"
+    measure "$LABEL_LIB" "$LIB_NATIVE" \
+        "Warmlauf $round/$WARMUP ($LABEL_LIB, Zeit wird verworfen)" \
+        "" "$WARM_STATUS"
+    round=$((round + 1))
+done
+
+round=1
+while [ "$round" -le "$REPEATS" ]; do
+    CURRENT_STEP="Messrunde $round"
+
+    if [ $((round % 2)) -eq 1 ]; then
+        log_info "Messrunde $round/$REPEATS - Reihenfolge: $LABEL_RCODE, $LABEL_LIB."
+        measure "$LABEL_RCODE" "$RCODE_NATIVE" \
+            "Messrunde $round/$REPEATS ($LABEL_RCODE)" \
+            "$RESULT" "$RUN_RCODE_STATUS"
+        measure "$LABEL_LIB" "$LIB_NATIVE" \
+            "Messrunde $round/$REPEATS ($LABEL_LIB)" \
+            "$RESULT" "$RUN_LIB_STATUS"
+    else
+        log_info "Messrunde $round/$REPEATS - Reihenfolge: $LABEL_LIB, $LABEL_RCODE."
+        measure "$LABEL_LIB" "$LIB_NATIVE" \
+            "Messrunde $round/$REPEATS ($LABEL_LIB)" \
+            "$RESULT" "$RUN_LIB_STATUS"
+        measure "$LABEL_RCODE" "$RCODE_NATIVE" \
+            "Messrunde $round/$REPEATS ($LABEL_RCODE)" \
+            "$RESULT" "$RUN_RCODE_STATUS"
+    fi
+
+    round=$((round + 1))
+done
 
 # ---------------------------------------------------------------------------
 # 5. Auswertung
@@ -402,18 +464,40 @@ if [ ! -s "$RESULT" ]; then
     die "Ergebnisdatei '$RESULT' fehlt oder ist leer."
 fi
 
+log_info "===== Einzelmessungen ====="
+cat "$RESULT" | tee -a "$LOG_FILE"
+
 log_info "===== Ergebnis ====="
 awk -F';' '
-    { ms[NR] = $3
-      printf "%-20s %6d Prozeduren %8d ms\n", $1, $2, $3 }
+    {
+        label = $1
+        if (!(label in runs)) { order[++labels] = label }
+        runs[label]++
+        total[label] += $3
+        if (!(label in best) || $3 < best[label]) best[label] = $3
+        procs[label] = $2
+    }
     END {
-      if (NR < 2) {
-          print "Es liegen weniger als zwei Messungen vor." > "/dev/stderr"
-          exit 1
-      }
-      if (ms[1] > 0)
-          printf "Unterschied: %d ms (%.1f %%)\n", ms[1] - ms[2],
-                 (ms[1] - ms[2]) * 100 / ms[1]
+        if (labels < 2) {
+            print "Es liegen weniger als zwei Varianten vor." > "/dev/stderr"
+            exit 1
+        }
+
+        for (i = 1; i <= labels; i++) {
+            l = order[i]
+            printf "%-20s %6d Prozeduren, %d Messungen: bestes %6d ms, Mittel %8.1f ms\n",
+                   l, procs[l], runs[l], best[l], total[l] / runs[l]
+        }
+
+        a = order[1]; b = order[2]
+        if (best[a] > 0)
+            printf "Unterschied (bester Lauf): %d ms (%.1f %%)\n",
+                   best[a] - best[b], (best[a] - best[b]) * 100 / best[a]
+        avg_a = total[a] / runs[a]; avg_b = total[b] / runs[b]
+        if (avg_a > 0)
+            printf "Unterschied (Mittelwert):  %.1f ms (%.1f %%)\n",
+                   avg_a - avg_b, (avg_a - avg_b) * 100 / avg_a
+        print "Positive Werte bedeuten: " b " war schneller als " a "."
     }' "$RESULT" 2>&1 | tee -a "$LOG_FILE"
 
 awk_status="${PIPESTATUS[0]}"

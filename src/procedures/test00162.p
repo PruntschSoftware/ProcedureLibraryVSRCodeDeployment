@@ -1,0 +1,3 @@
+/* test00162.p */
+DEFINE VARIABLE i AS INTEGER NO-UNDO.
+i = 162.
